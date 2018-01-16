@@ -1,0 +1,267 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+#packages needed
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(gtable)
+```
+
+# 1 combine two graphs with only one x-axis
+
+We first create 3 figures using the dataset 'OrchardSprays)
+```{r}
+# figure without x-axis and labels
+fig1 <- ggplot(OrchardSprays, aes(treatment, decrease, colour=factor(treatment)))+
+  geom_boxplot()+
+  ylim(ymin=0, ymax=150)+
+  theme(legend.position='none',
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+
+
+fig2 <- ggplot(OrchardSprays, aes(treatment, rowpos*colpos, colour=factor(treatment)))+
+  geom_boxplot()+
+  ylim(ymin=0, ymax=150)+
+  theme(legend.position='none')
+
+fig3 <- ggplot(OrchardSprays, aes(treatment, colpos, colour=factor(treatment)))+
+  geom_boxplot()
+```
+
+
+# arrange figures via gtable
+
+The problem in the resulting graph is the wrong scaling of the graph area
+```{r}
+g1 <- ggplotGrob(fig1) 
+g2 <- ggplotGrob(fig2)
+
+mat <- matrix(list(g1,g2), nrow=2)
+a <- gtable_matrix(name = "demo", grobs = mat, 
+                   widths = unit(c(12), "cm"), 
+                   heights = unit(c(3, 3), "cm"))
+grid.newpage()
+grid.draw(a)
+```
+
+
+The previous combined graph does not look nice because the chart area is not the same.
+To solve this I found a chunk of code on the internet
+Just run this code chunk to load the functions
+
+```{r}
+# define panel.hist function based on the code from ?pairs
+
+panel.hist <- function(x, ...)
+{
+	usr <- par("usr"); on.exit(par(usr))
+	par(usr = c(usr[1:2], 0, 1.5) )
+	h <- hist(x, plot = FALSE)
+	breaks <- h$breaks; nB <- length(breaks)
+	y <- h$counts; y <- y/max(y)
+	rect(breaks[-nB], 0, breaks[-1], y, col = "cyan", ...)
+}
+
+# define panel.cor function based on the code from ?pairs
+
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+{
+	usr <- par("usr"); on.exit(par(usr))
+	par(usr = c(0, 1, 0, 1))
+	r <- abs(cor(x, y))
+	txt <- format(c(r, 0.123456789), digits = digits)[1]
+	txt <- paste0(prefix, txt)
+	if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+	text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+
+# function to arrange plots borrowed from "https://github.com/baptiste/gridextra/wiki/arranging-ggplot#fix-the-panel-size"
+
+gtable_frame <- function(g, width=unit(1,"null"), height=unit(1,"null")){
+  panels <- g[["layout"]][grepl("panel", g[["layout"]][["name"]]), ]
+  ll <- unique(panels$l)
+  tt <- unique(panels$t)
+  
+  fixed_ar <- g$respect
+  if(fixed_ar) { # there lies madness, we want to align with aspect ratio constraints
+    ar <- as.numeric(g$heights[tt[1]]) / as.numeric(g$widths[ll[1]])
+    print(ar)
+    height <- width * ar
+    g$respect <- FALSE
+  }
+  
+  core <- g[seq(min(tt), max(tt)), seq(min(ll), max(ll))]
+  top <- g[seq(1, min(tt)-1), ]
+  bottom <- g[seq(max(tt)+1, nrow(g)), ]
+  left <- g[, seq(1, min(ll)-1)]
+  right <- g[, seq(max(ll)+1, ncol(g))]
+  
+  fg <- nullGrob()
+  lg <-  if(length(left))  g[seq(min(tt), max(tt)), seq(1, min(ll)-1)] else fg
+  rg <- if(length(right)) g[seq(min(tt), max(tt)), seq(max(ll)+1,ncol(g))] else fg
+  grobs = list(fg, g[seq(1, min(tt)-1), seq(min(ll), max(ll))], fg, 
+               lg, g[seq(min(tt), max(tt)), seq(min(ll), max(ll))], rg, 
+               fg, g[seq(max(tt)+1, nrow(g)), seq(min(ll), max(ll))], fg)
+  widths <- unit.c(sum(left$widths), width, sum(right$widths))
+  heights <- unit.c(sum(top$heights), height, sum(bottom$heights))
+  all <- gtable_matrix("all", grobs = matrix(grobs, ncol=3, nrow=3, byrow = TRUE), 
+                       widths = widths, heights = heights)
+  all[["layout"]][5,"name"] <- "panel" # make sure knows where the panel is
+  if(fixed_ar)  all$respect <- TRUE
+  all
+}
+
+```
+
+
+Now plot the two graphs again but first rescale them using the functions defined in the chunk above.
+```{r}
+g1 <- ggplotGrob(fig1) 
+g2 <- ggplotGrob(fig2)
+
+fg1 <- gtable_frame(g1) #using function defined in the previous chunk
+fg2 <- gtable_frame(g2) #using function defined in the previous chunk
+fg12 <- rbind(fg1,fg2, size = "last")
+grid.newpage()
+grid.draw(fg12)
+
+#setwd("D:/Bksercu/OneDrive - UGent/WE11c112/Bksercu/PhD/data/analysis/light_availability_paper")
+#ggsave(file="plots/tree_shrub_cover_review_numbered.tiff", width = 20, height = 20, units = "cm",dpi=300, fg12)
+```
+
+
+# 2. put group factor as label on the axis
+It might happen that you have two grouping factors and you want to plot boxplots per group for each group 2, ending up with indication of two grouplabels on your axis.
+This can be done with facet_wrap using labels (I also showed it with flipped coordinates)
+```{r}
+
+labels <- c("1" = "Block 1", "2"= "Block 2", "3" = "Block 3", "4"= "Block 4", "5"= "Block 5", "6"= "Block 6")
+
+ggplot(npk, aes(N, yield, colour=factor(N)))+
+  geom_boxplot()+
+  labs(title="block effects on yield for N-treatment", y= "yield")+
+  facet_wrap(~block,ncol=6,strip.position = "bottom", scales = "free_x",
+             labeller=labeller(block = labels))+
+  theme(axis.text=element_text(size=14, face="bold", angle=0),
+        axis.title=element_text(size=16,face="bold"),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        title=element_text(size=18,face="bold"),
+        plot.title = element_text(hjust = 0.5),
+        panel.spacing = unit(0, "lines"), 
+        strip.background = element_blank(),
+        strip.placement = "outside", 
+        strip.text =element_text(size=14, face="bold", angle=0))
+
+# horizontal boxplots with coord_flip()
+fig4 <- ggplot(npk, aes(N, yield, colour=factor(N)))+
+  geom_boxplot()+
+  coord_flip()+
+  labs(title="block effects on yield for N-treatment", y= "yield")+
+  facet_wrap(~block,nrow=3,strip.position = "left", scales = "free_y",
+             labeller=labeller(block = labels))+
+  theme(axis.text=element_text(size=14, face="bold", angle=0),
+        axis.title=element_text(size=16,face="bold"),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        title=element_text(size=18,face="bold"),
+        plot.title = element_text(hjust = 0.5),
+        panel.spacing = unit(0, "lines"), 
+        strip.background = element_blank(),
+        strip.placement = "outside", 
+        strip.text =element_text(size=14, face="bold", angle=0))
+
+fig4
+```
+
+
+# 3. combine graphs and text elements
+
+You can put several graphs, textelements and other figures together in an certain order and arrangement using arrangeGrob.
+
+Slightly change the previous graphs
+```{r}
+
+fig1 <- ggplot(OrchardSprays, aes(treatment, decrease, colour=factor(treatment)))+
+  geom_boxplot()+
+  ylim(ymin=0, ymax=150)+
+  theme(legend.position='none')
+
+fig2 <- ggplot(OrchardSprays, aes(treatment, rowpos*colpos, colour=factor(treatment)))+
+  geom_boxplot()+
+  ylim(ymin=0, ymax=150)+
+  theme(legend.position='none')
+
+fig3 <- ggplot(OrchardSprays, aes(treatment, colpos, colour=factor(treatment)))+
+  geom_boxplot()+
+  theme(legend.position='none')
+
+
+# horizontal boxplots with coord_flip()
+labels <- c("1" = "Block 1", "2"= "Block 2", "3" = "Block 3", "4"= "Block 4", "5"= "Block 5", "6"= "Block 6")
+
+fig4 <- ggplot(npk, aes(N, yield, colour=factor(N)))+
+  geom_boxplot()+
+  coord_flip()+
+  labs(title="block effects on yield for N-treatment", y= "yield")+
+  facet_wrap(~block,nrow=3,strip.position = "left", scales = "free_y",
+             labeller=labeller(block = labels))+
+  theme(axis.text=element_text(size=10, face="bold", angle=0),
+        axis.title=element_text(size=12,face="bold"),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        title=element_text(size=14,face="bold"),
+        plot.title = element_text(hjust = 0.5),
+        panel.spacing = unit(0, "lines"), 
+        strip.background = element_blank(),
+        strip.placement = "outside", 
+        strip.text =element_text(size=10, face="bold", angle=0))
+
+```
+
+
+```{r}
+# create a layout as you want it where each number is a separate Grob (figure or textgrob)
+
+lay <- rbind(c(1,NA,NA,2,NA,NA,3,NA,NA),
+             c(4,4,4,5,5,5,6,6,6),
+             c(4,4,4,5,5,5,6,6,6),
+             c(4,4,4,5,5,5,6,6,6),
+             c(4,4,4,5,5,5,6,6,6),
+             c(4,4,4,5,5,5,6,6,6),
+             c(4,4,4,5,5,5,6,6,6),
+             c(4,4,4,5,5,5,6,6,6),
+             c(4,4,4,5,5,5,6,6,6),
+             c(7,NA,NA,NA,NA,NA,NA,NA,NA),
+             c(10,10,10,10,10,10,10,10,10),
+             c(10,10,10,10,10,10,10,10,10),
+             c(10,10,10,10,10,10,10,10,10),
+             c(10,10,10,10,10,10,10,10,10),
+             c(10,10,10,10,10,10,10,10,10),
+             c(10,10,10,10,10,10,10,10,10),
+             c(10,10,10,10,10,10,10,10,10),
+             c(10,10,10,10,10,10,10,10,10),
+             c(10,10,10,10,10,10,10,10,10),
+             c(10,10,10,10,10,10,10,10,10))
+
+# define textgrobs
+t_a <- textGrob("a")
+t_b <- textGrob("b")
+t_c <- textGrob("c")
+t_d <- textGrob("d")
+
+
+g_1 <- arrangeGrob(t_a, t_b, t_c, fig1, fig2, fig3, t_d, fig4, layout_matrix = lay) # write the grobs in the correct order
+grid.newpage()
+grid.draw(g_1)
+```
+

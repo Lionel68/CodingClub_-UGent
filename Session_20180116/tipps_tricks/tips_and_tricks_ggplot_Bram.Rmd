@@ -265,3 +265,13 @@ grid.newpage()
 grid.draw(g_1)
 ```
 
+# adding text to a graph with annotate within you chart area
+```{r}
+ggplot(OrchardSprays, aes(treatment, decrease, colour=factor(treatment)))+
+  geom_boxplot()+
+  ylim(ymin=0, ymax=150)+
+  theme(legend.position='none')+
+  annotate("text",x=1,y=150,label="a",size=6)
+
+```
+
